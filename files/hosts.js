@@ -1,4 +1,4 @@
-var t = require("tcomb-form");
+var t = require("tcomb");
 
 var alias = t.struct({
   hostName: t.Str
@@ -17,7 +17,7 @@ function transformToFileContents(hostsConfig){
   var file = "";
   var hosts = hostsConfig.hosts;
   hosts.map(function(hostEntry){
-    file += address + "      " + hostEntry.hostNames.map(hostObj => {return hostObj.hostName}).join(" ") + "\n"; 
+    file += address + "      " + hostEntry.hostNames.map(hostObj => {return hostObj.hostName}).join(" ") + "\n";
   });
 
   return file;

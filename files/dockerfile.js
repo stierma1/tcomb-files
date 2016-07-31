@@ -1,4 +1,4 @@
-var t = require("tcomb-form");
+var t = require("tcomb");
 
 /*
 directive,
@@ -94,8 +94,8 @@ var instruction = t.struct({
   context: t.maybe(context),
   onBuild: t.Boolean,
   globalsAndMetaInstruction: t.maybe(keyValInstruction),
-  addFileInstruction: t.maybe(addFileInstruction),
-  runCmdInstruction: t.maybe(runCmdInstruction),
+  addFileInstructions: t.maybe(t.list(addFileInstruction)),
+  runCmdInstructions: t.maybe(t.list(runCmdInstruction)),
   expose: t.maybe(t.list(numValue)),
   healthcheck: t.maybe(healthcheck)
 }, "instruction")
@@ -145,32 +145,38 @@ function transformToFileContents(config){
       })
     }
 
-    if(instruction.addFileInstruction){
-      file += (instruction.onBuild ? "ONBUILD " : "");
-      switch(instruction.addFileInstruction.type){
-        case "add" : file += "ADD "; break;
-        case "copy" : file += "COPY "; break;
+    if(instruction.addFileInstructions){
+      for(var addFileInstruction of instruction.addFileInstructions){
+        file += (instruction.onBuild ? "ONBUILD " : "");
+        switch(addFileInstruction.type){
+          case "add" : file += "ADD "; break;
+          case "copy" : file += "COPY "; break;
+        }
+        var args = addFileInstruction.fileCopyConfig.srcs.concat([addFileInstruction.fileCopyConfig.dest]);
+        file += JSON.stringify(args) + "\n"
       }
-      var args = instruction.addFileInstruction.fileCopyConfig.srcs.concat([instruction.addFileInstruction.fileCopyConfig.dest]);
-      file += JSON.stringify(args) + "\n"
     }
 
-    if(instruction.runCmdInstruction){
-      file += (instruction.onBuild ? "ONBUILD " : "");
-      if(instruction.runCmdInstruction.shell){
-        let args = [instruction.runCmdInstruction.shell.executable]
-          .concat(instruction.runCmdInstruction.shell.options || []);
-        file += "SHELL " + JSON.stringify(args) + "\n"
+    if(instruction.runCmdInstructions){
+      for(var runCmdInstruction of instruction.runCmdInstructions){
         file += (instruction.onBuild ? "ONBUILD " : "");
+        if(runCmdInstruction.shell){
+          let args = [runCmdInstruction.shell.executable]
+            .concat(runCmdInstruction.shell.options || []);
+          file += "SHELL " + JSON.stringify(args) + "\n"
+          file += (instruction.onBuild ? "ONBUILD " : "");
+        }
+        switch(runCmdInstruction.type){
+          case "run" : file += "RUN "; break;
+          case "cmd" : file += "CMD "; break;
+          case "entrypoint" : file += "ENTRYPOINT "; break;
+        }
+        let args = [runCmdInstruction.commandConfig.executable]
+          .concat((runCmdInstruction.commandConfig.options || []).map((obj) => {
+            return value;
+          }));
+        file += JSON.stringify(args) + "\n"
       }
-      switch(instruction.runCmdInstruction.type){
-        case "run" : file += "RUN "; break;
-        case "cmd" : file += "CMD "; break;
-        case "entrypoint" : file += "ENTRYPOINT "; break;
-      }
-      let args = [instruction.runCmdInstruction.commandConfig.executable]
-        .concat(instruction.runCmdInstruction.commandConfig.options || []);
-      file += JSON.stringify(args) + "\n"
     }
 
     if(instruction.expose){
@@ -179,7 +185,7 @@ function transformToFileContents(config){
       file += instruction.expose.map(obj => obj.value).join(" ") + "\n";
     }
 
-    if(instruction.healthcheck){
+    if(instruction.healthcheck && (instruction.healthcheck.none || instruction.healthcheck.commandConfig)){
       file += (instruction.onBuild ? "ONBUILD " : "");
       file += "HEALTCHECK ";
       if(instruction.healthcheck.none){
@@ -197,7 +203,9 @@ function transformToFileContents(config){
         if(instruction.healthcheck.commandConfig){
           file += "CMD ";
           var args = [instruction.healthcheck.commandConfig.executable]
-            .concat(instruction.healthcheck.commandConfig.options || []);
+            .concat((instruction.healthcheck.commandConfig.options || []).map((obj) => {
+              return value;
+            }));
           file += JSON.stringify(args);
         }
         file += "\n"

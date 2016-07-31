@@ -1,4 +1,4 @@
-var t = require("tcomb-form");
+var t = require("tcomb");
 
 var watchConfig = t.struct({
   interval: t.maybe(t.Num),

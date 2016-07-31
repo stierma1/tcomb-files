@@ -1,4 +1,4 @@
-var t = require("tcomb-form");
+var t = require("tcomb");
 
 var filePath = t.struct({
   filePath: t.String

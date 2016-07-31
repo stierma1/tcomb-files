@@ -162,7 +162,9 @@ function transformToFileContents(config){
         file += (instruction.onBuild ? "ONBUILD " : "");
         if(runCmdInstruction.shell){
           let args = [runCmdInstruction.shell.executable]
-            .concat(runCmdInstruction.shell.options || []);
+            .concat((runCmdInstruction.shell.options || []).map((obj) => {
+              return obj.value;
+            }));
           file += "SHELL " + JSON.stringify(args) + "\n"
           file += (instruction.onBuild ? "ONBUILD " : "");
         }

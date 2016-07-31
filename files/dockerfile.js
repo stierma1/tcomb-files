@@ -152,7 +152,7 @@ function transformToFileContents(config){
           case "add" : file += "ADD "; break;
           case "copy" : file += "COPY "; break;
         }
-        var args = addFileInstruction.fileCopyConfig.srcs.concat([addFileInstruction.fileCopyConfig.dest]);
+        var args = (addFileInstruction.fileCopyConfig.srcs || []).map((obj) => {return obj.value}).concat([addFileInstruction.fileCopyConfig.dest]);
         file += JSON.stringify(args) + "\n"
       }
     }
@@ -173,7 +173,7 @@ function transformToFileContents(config){
         }
         let args = [runCmdInstruction.commandConfig.executable]
           .concat((runCmdInstruction.commandConfig.options || []).map((obj) => {
-            return value;
+            return obj.value;
           }));
         file += JSON.stringify(args) + "\n"
       }
@@ -204,7 +204,7 @@ function transformToFileContents(config){
           file += "CMD ";
           var args = [instruction.healthcheck.commandConfig.executable]
             .concat((instruction.healthcheck.commandConfig.options || []).map((obj) => {
-              return value;
+              return obj.value;
             }));
           file += JSON.stringify(args);
         }

@@ -1,0 +1,22 @@
+{
+  "name": "tcomb-files",
+  "version": "1.0.0",
+  "description": "Group of tcomb-schemas",
+  "main": "index.js",
+  "scripts": {
+    "test": "exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stierma1/tcomb-files.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stierma1/tcomb-files/issues"
+  },
+  "homepage": "https://github.com/stierma1/tcomb-files#readme",
+  "dependencies": {
+    "tcomb-form": "^0.9.9"
+  }
+}

@@ -112,12 +112,11 @@ function transformToFileContents(config){
   for(var directive of config.directives || []){
     file += "# " + directive.key + "=" + directive.value +"\n"
   }
-
-  file += "MAINTAINER " + config.maintainer + "\n";
-
   file += "FROM " + config.from.image +
     (config.from.tag ? ":" + config.from.tag : "") +
     (config.from.digest ? "@" + config.from.digest : "") + "\n"
+
+  file += "MAINTAINER " + config.maintainer + "\n";
 
   for(var instruction of config.instructions || []){
     if(instruction.context){

@@ -188,7 +188,7 @@ function transformToFileContents(config){
 
     if(instruction.healthcheck && (instruction.healthcheck.none || instruction.healthcheck.commandConfig)){
       file += (instruction.onBuild ? "ONBUILD " : "");
-      file += "HEALTCHECK ";
+      file += "HEALTHCHECK ";
       if(instruction.healthcheck.none){
         file += "NONE" + "\n";
       } else {

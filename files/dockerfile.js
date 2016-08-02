@@ -97,6 +97,7 @@ var instruction = t.struct({
   addFileInstructions: t.maybe(t.list(addFileInstruction)),
   runCmdInstructions: t.maybe(t.list(runCmdInstruction)),
   expose: t.maybe(t.list(numValue)),
+  volume: t.maybe(t.list(t.String)),
   healthcheck: t.maybe(healthcheck)
 }, "instruction")
 
@@ -104,7 +105,8 @@ var DockerFile = t.struct({
   directives: t.maybe(t.list(keyValue)),
   from: fromStruct,
   maintainer: t.String,
-  instructions: t.maybe(t.list(instruction))
+  instructions: t.maybe(t.list(instruction)),
+  stopsignal: t.Number
 }, "dockerfile")
 
 function transformToFileContents(config){
@@ -179,7 +181,11 @@ function transformToFileContents(config){
         file += JSON.stringify(args) + "\n"
       }
     }
-
+    if(instruction.volume){
+      file += (instruction.onBuild ? "ONBUILD " : "");
+      file += "VOLUME ";
+      file += JSON.stringify(instruction.volume) + "\n";
+    }
     if(instruction.expose){
       file += (instruction.onBuild ? "ONBUILD " : "");
       file += "EXPOSE ";
@@ -212,6 +218,9 @@ function transformToFileContents(config){
         file += "\n"
       }
     }
+  }
+  if(config.stopsignal !== null){
+    file += "STOPSIGNAL " + config.stopsignal + "\n";
   }
   return file;
 }

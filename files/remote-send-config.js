@@ -7,7 +7,8 @@ var filePath = t.struct({
 var remoteSendConfig = t.struct({
     url: t.String,
     additionalFiles: t.maybe(t.list(filePath)),
-    tags: t.maybe(t.list(t.String))
+    tags: t.maybe(t.list(t.String)),
+    tagLatest: t.Boolean
 }, "remote-send-config")
 
 

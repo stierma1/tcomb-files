@@ -7,8 +7,7 @@ var filePath = t.struct({
 var remoteSendConfig = t.struct({
     url: t.String,
     additionalFiles: t.maybe(t.list(filePath)),
-    dockerFile: t.Boolean,
-    hosts: t.Boolean
+    tags: t.maybe(t.list(t.String))
 }, "remote-send-config")
 
 

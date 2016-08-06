@@ -8,7 +8,7 @@ var remoteSendConfig = t.struct({
     url: t.String,
     additionalFiles: t.maybe(t.list(filePath)),
     tags: t.maybe(t.list(t.String)),
-    tagLatest: t.Boolean
+    tagLatest: t.maybe(t.enums({"false":"false", "true": "true"}, "tag-latest"))
 }, "remote-send-config")
 
 

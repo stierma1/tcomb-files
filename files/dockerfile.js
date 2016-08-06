@@ -51,63 +51,183 @@ var context = t.struct({
   workDir: t.maybe(t.Str)
 }, "context");
 
-var instruction = t.struct({
-  context: context
-}, "instruction")
+var InstructionBase = t.struct({
+  context: t.maybe(context),
+  onBuild: t.maybe(t.enums({"false":"false", "true":"true"}, "on-build")),
+  instructionType: t.enums({
+    "RUN": "RUN",
+    "CMD": "CMD",
+    "ENTRYPOINT":"ENTRYPOINT",
+    "LABEL": "LABEL",
+    "ENV": "ENV",
+    "ARG": "ARG",
+    "EXPOSE": "EXPOSE",
+    "VOLUME": "VOLUME",
+    "ADD":"ADD",
+    "COPY":"COPY",
+    "VOLUME":"VOLUME",
+    "HEALTHCHECK": "HEALTHCHECK",
+    "STOPSIGNAL":"STOPSIGNAL"
+  }, "InstructionType")
+});
 
-var runCmdInstruction = t.struct({
-  shell: t.maybe(runCmd),
-  type: t.enums({
-    "run": "RUN",
-    "cmd": "CMD",
-    "entrypoint": "ENTRYPOINT"
-  }, "command-type"),
-  commandConfig: runCmd
-}, "run-cmd-instruction" )
+var VolumeInstruction = InstructionBase.extend({
+  path: t.String
+})
 
-var addFileInstruction = t.struct({
-  type: t.enums({
-    "add": "ADD",
-    "copy": "COPY"
-  }, "copy-type"),
-  fileCopyConfig: fileCopyEntry
-}, "add-file-instruction")
+var ExposeInstruction = InstructionBase.extend({
+  port: t.Number
+})
 
-var keyValInstruction = t.struct({
-  type: t.enums({
-    "label": "LABEL",
-    "arg": "ARG",
-    "env": "ENV"
-  }, "key-val-type"),
-  keyValues: t.list(keyValue)
-}, "key-value-instruction")
-
-var healthcheck = t.struct({
+var HealthcheckInstruction = InstructionBase.extend({
   interval: t.maybe(t.String),
   timeout:t.maybe(t.String),
   retries: t.maybe(t.Num),
-  none:t.Boolean,
+  none: t.maybe(t.String),
   commandConfig: t.maybe(runCmd)
-}, "healthcheck")
+})
 
-var instruction = t.struct({
-  context: t.maybe(context),
-  onBuild: t.Boolean,
-  globalsAndMetaInstruction: t.maybe(keyValInstruction),
-  addFileInstructions: t.maybe(t.list(addFileInstruction)),
-  runCmdInstructions: t.maybe(t.list(runCmdInstruction)),
-  expose: t.maybe(t.list(numValue)),
-  volume: t.maybe(t.list(t.String)),
-  healthcheck: t.maybe(healthcheck)
-}, "instruction")
+var StopsignalInstruction = InstructionBase.extend({
+  signal: t.Num
+})
+
+var GlobalsAndMetaInstruction = InstructionBase.extend({
+  key:t.String,
+  value: t.String
+})
+
+var RunCmdInstruction = InstructionBase.extend({
+  shell: t.maybe(runCmd),
+  commandConfig: runCmd
+})
+
+var AddFileInstruction = InstructionBase.extend({
+  srcs: t.list(value),
+  dest: t.String
+});
+
+var Instruction = t.union([InstructionBase, RunCmdInstruction,
+  GlobalsAndMetaInstruction,AddFileInstruction, ExposeInstruction,
+  VolumeInstruction, HealthcheckInstruction, StopsignalInstruction], "Instruction");
+
+Instruction.dispatch = function(instructionBase){
+  if(!instructionBase){
+      return InstructionBase;
+  }
+
+  switch(instructionBase.instructionType){
+    case "RUN":
+    case "CMD":
+    case "ENTRYPOINT": return RunCmdInstruction
+    case "LABEL":
+    case "ENV":
+    case "ARG": return GlobalsAndMetaInstruction
+    case "ADD":
+    case "COPY": return AddFileInstruction
+    case "EXPOSE": return ExposeInstruction
+    case "VOLUME": return VolumeInstruction
+    case "HEALTHCHECK": return HealthcheckInstruction
+    case "STOPSIGNAL": return StopsignalInstruction
+    default: return InstructionBase
+  }
+}
 
 var DockerFile = t.struct({
   directives: t.maybe(t.list(keyValue)),
   from: fromStruct,
   maintainer: t.String,
-  instructions: t.maybe(t.list(instruction)),
-  stopsignal: t.Number
+  instructions: t.maybe(t.list(Instruction))
 }, "dockerfile")
+
+function buildRunCMD(instruction){
+   var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+    if(instruction.shell){
+      let args = [instruction.shell.executable]
+        .concat((instruction.shell.options || []).map((obj) => {
+          return obj.value;
+        }));
+      file += "SHELL " + JSON.stringify(args) + "\n"
+      file += (instruction.onBuild ? "ONBUILD " : "");
+    }
+    file += instruction.instructionType + " "
+    let args = [instruction.commandConfig.executable]
+      .concat((instruction.commandConfig.options || []).map((obj) => {
+        return obj.value;
+      }));
+    file += JSON.stringify(args) + "\n"
+    return file;
+}
+
+function buildAddFile(instruction){
+   var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+   file += instruction.instructionType + " "
+   var args = (instruction.srcs || []).map((obj) => {return obj.value}).concat([instruction.dest]);
+   file += JSON.stringify(args) + "\n"
+  return file;
+}
+
+function buildLabel(instruction){
+   var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+
+  file += instruction.instructionType + " "
+  file += instruction.key + "=" + instruction.value + "\n"
+  return file
+}
+
+function buildHealthCheck(instruction){
+   var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+
+  file += instruction.instructionType + " "
+  if(!instruction.commandConfig){
+    file += "NONE" + "\n";
+    return file;
+  } else {
+    if(instruction.interval){
+      file += "--interval=" + instruction.interval +" ";
+    }
+    if(instruction.timeout){
+      file += "--timeout=" + instruction.timeout + " "
+    }
+    if(instruction.retries){
+      file += "--retry=" + instruction.retries + " "
+    }
+    if(instruction.commandConfig){
+      file += "CMD ";
+      var args = [instruction.commandConfig.executable]
+        .concat((instruction.commandConfig.options || []).map((obj) => {
+          return obj.value;
+        }));
+      file += JSON.stringify(args);
+    }
+    file += "\n"
+  }
+  return file;
+}
+
+function buildVolume(instruction){
+  var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+
+  file += instruction.instructionType + " ";
+  file += JSON.stringify([instruction.path]) + "\n";
+  return file;
+}
+
+function buildExpose(instruction){
+  var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+
+  file += instruction.instructionType + " ";
+  file += instruction.port + "\n";
+  return file;
+}
+
+function buildStopSignal(instruction){
+  var file = (instruction.onBuild === "true" ? "ONBUILD " : "");
+
+  file += instruction.instructionType + " ";
+  file += instruction.signal + "\n";
+  return file;
+}
+
 
 function transformToFileContents(config){
   var file = "";
@@ -123,105 +243,29 @@ function transformToFileContents(config){
   for(var instruction of config.instructions || []){
     if(instruction.context){
       if(instruction.context.user){
-        file += (instruction.onBuild ? "ONBUILD " : "") +  "USER " + instruction.context.user + "\n"
+        file += (instruction.onBuild === "true" ? "ONBUILD " : "") +  "USER " + instruction.context.user + "\n"
       }
       if(instruction.context.workDir){
-        file += (instruction.onBuild ? "ONBUILD " : "") + "WORKDIR " + instruction.context.workDir + "\n"
+        file += (instruction.onBuild === "true" ? "ONBUILD " : "") + "WORKDIR " + instruction.context.workDir + "\n"
       }
     }
 
-    if(instruction.globalsAndMetaInstruction){
-      var ins = "";
-      ins += (instruction.onBuild ? "ONBUILD " : "");
-      switch(instruction.globalsAndMetaInstruction.type){
-        case "arg" : ins += "ARG "; break;
-        case "label" : ins += "LABEL "; break;
-        case "env": ins += "ENV "; break;
-      }
-
-      instruction.globalsAndMetaInstruction.keyValues.map((obj) => {
-        return obj.key + "=" + obj.value
-      }).map((kvStr) => {
-        file += ins + kvStr + "\n"
-      })
-    }
-
-    if(instruction.addFileInstructions){
-      for(var addFileInstruction of instruction.addFileInstructions){
-        file += (instruction.onBuild ? "ONBUILD " : "");
-        switch(addFileInstruction.type){
-          case "add" : file += "ADD "; break;
-          case "copy" : file += "COPY "; break;
-        }
-        var args = (addFileInstruction.fileCopyConfig.srcs || []).map((obj) => {return obj.value}).concat([addFileInstruction.fileCopyConfig.dest]);
-        file += JSON.stringify(args) + "\n"
-      }
-    }
-
-    if(instruction.runCmdInstructions){
-      for(var runCmdInstruction of instruction.runCmdInstructions){
-        file += (instruction.onBuild ? "ONBUILD " : "");
-        if(runCmdInstruction.shell){
-          let args = [runCmdInstruction.shell.executable]
-            .concat((runCmdInstruction.shell.options || []).map((obj) => {
-              return obj.value;
-            }));
-          file += "SHELL " + JSON.stringify(args) + "\n"
-          file += (instruction.onBuild ? "ONBUILD " : "");
-        }
-        switch(runCmdInstruction.type){
-          case "run" : file += "RUN "; break;
-          case "cmd" : file += "CMD "; break;
-          case "entrypoint" : file += "ENTRYPOINT "; break;
-        }
-        let args = [runCmdInstruction.commandConfig.executable]
-          .concat((runCmdInstruction.commandConfig.options || []).map((obj) => {
-            return obj.value;
-          }));
-        file += JSON.stringify(args) + "\n"
-      }
-    }
-    if(instruction.volume){
-      file += (instruction.onBuild ? "ONBUILD " : "");
-      file += "VOLUME ";
-      file += JSON.stringify(instruction.volume) + "\n";
-    }
-    if(instruction.expose){
-      file += (instruction.onBuild ? "ONBUILD " : "");
-      file += "EXPOSE ";
-      file += instruction.expose.map(obj => obj.value).join(" ") + "\n";
-    }
-
-    if(instruction.healthcheck && (instruction.healthcheck.none || instruction.healthcheck.commandConfig)){
-      file += (instruction.onBuild ? "ONBUILD " : "");
-      file += "HEALTHCHECK ";
-      if(instruction.healthcheck.none){
-        file += "NONE" + "\n";
-      } else {
-        if(instruction.healthcheck.interval){
-          file += "--interval=" + instruction.healthcheck.interval +" ";
-        }
-        if(instruction.healthcheck.timeout){
-          file += "--timeout=" + instruction.healthcheck.timeout + " "
-        }
-        if(instruction.healthcheck.retries){
-          file += "--retry=" + instruction.healthcheck.retries + " "
-        }
-        if(instruction.healthcheck.commandConfig){
-          file += "CMD ";
-          var args = [instruction.healthcheck.commandConfig.executable]
-            .concat((instruction.healthcheck.commandConfig.options || []).map((obj) => {
-              return obj.value;
-            }));
-          file += JSON.stringify(args);
-        }
-        file += "\n"
-      }
+    switch(instruction.instructionType){
+      case "RUN":
+      case "CMD":
+      case "ENTRYPOINT": file += buildRunCMD(instruction); break;
+      case "LABEL":
+      case "ENV":
+      case "ARG":  file += buildLabel(instruction); break;
+      case "ADD":
+      case "COPY": file += buildAddFile(instruction); break;
+      case "EXPOSE": file += buildExpose(instruction); break;
+      case "VOLUME": file += buildVolume(instruction); break;
+      case "HEALTHCHECK": file += buildHealthCheck(instruction); break;
+      case "STOPSIGNAL": file += buildStopSignal(instruction); break;
     }
   }
-  if(config.stopsignal !== null){
-    file += "STOPSIGNAL " + config.stopsignal + "\n";
-  }
+
   return file;
 }
 
